@@ -1,10 +1,10 @@
 using System.Collections.Frozen;
 
-// 在初始化階段建立，執行期間只進行查詢。
+// 初始化時準備資料，再建立供後續查詢使用的 frozen dictionary。
 var categoryNames = new Dictionary<string, string>
 {
     ["BOOK"] = "書籍",
     ["SOFTWARE"] = "軟體"
-}.ToFrozenDictionary();
+}.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
-Console.WriteLine(categoryNames["BOOK"]); // 輸出：書籍
+Console.WriteLine(categoryNames["book"]); // 輸出：書籍

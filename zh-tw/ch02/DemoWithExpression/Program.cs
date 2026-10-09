@@ -26,6 +26,7 @@ Console.WriteLine("巢狀 with：");
 PrintProfile("原始 profile", profile);
 PrintProfile("更新 profile", updatedProfile);
 
+// WithCity 只示範局部更新；實務上還需驗證完整地址是否一致。
 var changedByMethod = profile.WithCity("桃園市");
 
 Console.WriteLine();

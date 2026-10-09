@@ -44,5 +44,39 @@ class Program
 
         Console.WriteLine($"原始項目數量: {originalLine.Quantity}");
         Console.WriteLine($"更新後項目數量: {updatedLine.Quantity}");
+
+        // 4. 建構式驗證值的內容；required 只要求提供必要成員。
+        var item = new OrderItem("P001", 2);
+        Console.WriteLine($"通過驗證的項目數量: {item.Quantity}");
+
+        try
+        {
+            _ = new OrderItem("P001", 0);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            Console.WriteLine("建構式拒絕了數量為 0 的項目。");
+        }
+    }
+}
+
+public sealed record OrderItem
+{
+    public string ProductId { get; }
+    public int Quantity { get; }
+
+    public OrderItem(string productId, int quantity)
+    {
+        // 驗證單一欄位的格式。
+        if (string.IsNullOrWhiteSpace(productId))
+            throw new ArgumentException(
+                "ProductId 不能為空", nameof(productId));
+
+        // 驗證業務規則。
+        if (quantity <= 0)
+            throw new ArgumentOutOfRangeException(nameof(quantity));
+
+        ProductId = productId;
+        Quantity = quantity;
     }
 }
