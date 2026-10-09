@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="DemoMutableOrder/DemoMutableOrder.csproj" Type="Classic C#" />
   <Project Path="DemoImmutableOrder/DemoImmutableOrder.csproj" Type="Classic C#" />
+  <Project Path="DemoOrderStateTests/DemoOrderStateTests.csproj" Type="Classic C#" />
+  <Project Path="DemoRecordBasics/DemoRecordBasics.csproj" Type="Classic C#" />
 </Solution>
