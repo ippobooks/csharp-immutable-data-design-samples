@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="DemoAbstractRecordExhaustiveness/DemoAbstractRecordExhaustiveness.csproj" />
   <Project Path="DemoOrderUnion/DemoOrderUnion.csproj" />
+  <Project Path="DemoOrderStateHierarchy/DemoOrderStateHierarchy.csproj" />
 </Solution>

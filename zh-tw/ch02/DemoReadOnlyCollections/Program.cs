@@ -50,5 +50,9 @@ class Program
                 "捕獲 NullReferenceException！" +
                 "未初始化的 ImmutableArray 預設底層是 null。");
         }
+
+        var safeItems = ImmutableArray<OrderLine>.Empty;
+        Console.WriteLine(safeItems.IsDefault); // False
+        Console.WriteLine(safeItems.Length);    // 0
     }
 }

@@ -26,12 +26,15 @@ public sealed record Order(
     string CustomerId,
     OrderStatus Status,
     ImmutableArray<OrderLine> Lines,
-    decimal Total,
     DateTimeOffset CreatedAt,
     DateTimeOffset? SubmittedAt = null,
     DateTimeOffset? PaidAt = null,
     DateTimeOffset? ShippedAt = null,
-    string? CancelReason = null);
+    string? CancelReason = null)
+{
+    public decimal Total => Lines.Sum(
+        line => line.UnitPrice * line.Quantity);
+}
 
 public sealed record OrderTransitionResult
 {
@@ -71,6 +74,18 @@ public static class OrderWorkflow
         {
             return OrderTransitionResult.Fail(
                 $"只有草稿可以提交，目前狀態：{order.Status}");
+        }
+
+        if (order.Lines.IsDefault)
+        {
+            return OrderTransitionResult.Fail(
+                "訂單項目尚未初始化");
+        }
+
+        if (order.Lines.IsEmpty)
+        {
+            return OrderTransitionResult.Fail(
+                "訂單必須至少有一個項目才能提交");
         }
 
         var submitted = order with
@@ -138,7 +153,6 @@ public class Program
             "CUST-42",
             OrderStatus.Draft,
             lines,
-            500m,
             now);
 
         Console.WriteLine($"初始狀態：{draft.Status}");

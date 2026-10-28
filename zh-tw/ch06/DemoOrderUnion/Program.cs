@@ -18,7 +18,21 @@ var paid = OrderWorkflow.Pay(
 var shipped = OrderWorkflow.Ship(
     paid, "TRK-20260101", createdAt.AddDays(1));
 
-Order order = shipped;
+// 取得的型別是 Order 時，先確認內含的是可付款的狀態。
+Order order = submitted;
+var now = createdAt.AddHours(2);
+if (order is SubmittedOrder readyToPay)
+{
+    var paidVersion = OrderWorkflow.Pay(readyToPay, now);
+    Console.WriteLine(paidVersion.PaidAt);
+    // 實際流程會把 paidVersion 交給後續處理或儲存。
+}
+else
+{
+    Console.WriteLine("目前的訂單狀態不能付款。");
+}
+
+order = shipped;
 Console.WriteLine(OrderQueries.GetStatusDescription(order));
 
 public sealed record OrderLine(

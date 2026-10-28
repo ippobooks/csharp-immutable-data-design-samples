@@ -1,205 +1,73 @@
 using System;
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Linq;
 
-var lines = ImmutableArray.Create(
-    new OrderLine("P001", "機械式鍵盤", 1, 2_800m),
-    new OrderLine("P002", "USB-C 傳輸線", 2, 450m));
+var submittedAt = new DateTimeOffset(
+    2026, 1, 1, 10, 0, 0, TimeSpan.Zero);
+var paidAt = submittedAt.AddHours(1);
 
-var createdAt = new DateTimeOffset(
-    2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
+var draft = new DraftOrder("ORD-001");
+var submitted = OrderWorkflow.Submit(draft, submittedAt);
+var paid = OrderWorkflow.Pay(submitted, paidAt);
 
-var draft = OrderFactory.Create(
-    "ORD-001", "CUST-42", lines, createdAt);
-var submitted = OrderWorkflow.Submit(
-    draft, createdAt.AddMinutes(5));
-var paid = OrderWorkflow.Pay(
-    submitted, createdAt.AddHours(2));
-var shipped = OrderWorkflow.Ship(
-    paid, "TRK-20260101", createdAt.AddDays(1));
+if (paid.Id != draft.Id || paid.SubmittedAt != submittedAt ||
+    paid.PaidAt != paidAt || submitted.SubmittedAt != submittedAt)
+{
+    throw new InvalidOperationException("轉換沒有保留預期資料。");
+}
 
-Console.WriteLine(OrderQueries.GetStatusDescription(shipped));
+Console.WriteLine(OrderQueries.Describe(draft));
+Console.WriteLine(OrderQueries.Describe(submitted));
+Console.WriteLine(OrderQueries.Describe(paid));
 
-public sealed record OrderLine(
-    string ProductId,
-    string ProductName,
-    int Quantity,
-    decimal UnitPrice);
+// 取消註解後會編譯失敗：付款只接受 SubmittedOrder。
+// OrderWorkflow.Pay(draft, paidAt);
 
-public abstract record Order(
-    string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt);
+// 一般繼承階層仍允許新狀態；既有 switch 不會因此編譯失敗。
+Order returned = new ReturnedOrder("ORD-002");
+try
+{
+    OrderQueries.Describe(returned);
+    throw new Exception("未預期的狀態沒有被拒絕。");
+}
+catch (InvalidOperationException)
+{
+    Console.WriteLine("未支援的狀態由執行期分支拒絕。");
+}
 
-public sealed record DraftOrder(
-    string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt)
-    : Order(Id, CustomerId, Lines, Total, CreatedAt);
+public abstract record Order(string Id);
+
+public sealed record DraftOrder(string Id) : Order(Id);
 
 public sealed record SubmittedOrder(
     string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset SubmittedAt)
-    : Order(Id, CustomerId, Lines, Total, CreatedAt);
+    DateTimeOffset SubmittedAt) : Order(Id);
 
 public sealed record PaidOrder(
     string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt,
     DateTimeOffset SubmittedAt,
-    DateTimeOffset PaidAt)
-    : Order(Id, CustomerId, Lines, Total, CreatedAt);
+    DateTimeOffset PaidAt) : Order(Id);
 
-public sealed record ShippedOrder(
-    string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset SubmittedAt,
-    DateTimeOffset PaidAt,
-    DateTimeOffset ShippedAt,
-    string TrackingNumber)
-    : Order(Id, CustomerId, Lines, Total, CreatedAt);
-
-public sealed record CancelledOrder(
-    string Id,
-    string CustomerId,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt,
-    string CancelReason)
-    : Order(Id, CustomerId, Lines, Total, CreatedAt);
-
-public static class OrderFactory
-{
-    public static DraftOrder Create(
-        string id,
-        string customerId,
-        ImmutableArray<OrderLine> lines,
-        DateTimeOffset now)
-    {
-        if (lines.IsDefaultOrEmpty)
-        {
-            throw new ArgumentException(
-                "至少需要一個訂單項目",
-                nameof(lines));
-        }
-
-        return new DraftOrder(
-            id,
-            customerId,
-            lines,
-            lines.Sum(line => line.Quantity * line.UnitPrice),
-            now);
-    }
-}
+public sealed record ReturnedOrder(string Id) : Order(Id);
 
 public static class OrderWorkflow
 {
     public static SubmittedOrder Submit(
         DraftOrder draft,
-        DateTimeOffset now) =>
-        new(
-            draft.Id,
-            draft.CustomerId,
-            draft.Lines,
-            draft.Total,
-            draft.CreatedAt,
-            SubmittedAt: now);
+        DateTimeOffset submittedAt) =>
+        new(draft.Id, submittedAt);
 
     public static PaidOrder Pay(
         SubmittedOrder submitted,
-        DateTimeOffset now) =>
-        new(
-            submitted.Id,
-            submitted.CustomerId,
-            submitted.Lines,
-            submitted.Total,
-            submitted.CreatedAt,
-            submitted.SubmittedAt,
-            PaidAt: now);
-
-    public static ShippedOrder Ship(
-        PaidOrder paid,
-        string trackingNumber,
-        DateTimeOffset now)
-    {
-        if (string.IsNullOrWhiteSpace(trackingNumber))
-        {
-            throw new ArgumentException(
-                "出貨時必須提供追蹤號碼",
-                nameof(trackingNumber));
-        }
-
-        return new ShippedOrder(
-            paid.Id,
-            paid.CustomerId,
-            paid.Lines,
-            paid.Total,
-            paid.CreatedAt,
-            paid.SubmittedAt,
-            paid.PaidAt,
-            ShippedAt: now,
-            TrackingNumber: trackingNumber);
-    }
-
-    public static CancelledOrder Cancel(
-        DraftOrder order,
-        string reason) => CancelCore(order, reason);
-
-    public static CancelledOrder Cancel(
-        SubmittedOrder order,
-        string reason) => CancelCore(order, reason);
-
-    public static CancelledOrder Cancel(
-        PaidOrder order,
-        string reason) => CancelCore(order, reason);
-
-    private static CancelledOrder CancelCore(
-        Order order,
-        string reason)
-    {
-        if (string.IsNullOrWhiteSpace(reason))
-        {
-            throw new ArgumentException(
-                "取消訂單必須提供原因",
-                nameof(reason));
-        }
-
-        return new CancelledOrder(
-            order.Id,
-            order.CustomerId,
-            order.Lines,
-            order.Total,
-            order.CreatedAt,
-            CancelReason: reason);
-    }
+        DateTimeOffset paidAt) =>
+        new(submitted.Id, submitted.SubmittedAt, paidAt);
 }
 
 public static class OrderQueries
 {
-    public static string GetStatusDescription(Order order) =>
-        order switch
-        {
-            DraftOrder => "草稿",
-            SubmittedOrder => "已提交",
-            PaidOrder => "已付款",
-            ShippedOrder shipped =>
-                $"已出貨，追蹤號碼：{shipped.TrackingNumber}",
-            CancelledOrder cancelled =>
-                $"已取消：{cancelled.CancelReason}",
-            _ => throw new UnreachableException()
-        };
+    public static string Describe(Order order) => order switch
+    {
+        DraftOrder => "草稿",
+        SubmittedOrder => "已提交",
+        PaidOrder => "已付款",
+        _ => throw new InvalidOperationException("未支援的訂單狀態")
+    };
 }
