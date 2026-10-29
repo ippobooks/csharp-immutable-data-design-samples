@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="DemoOrderApiBoundary/DemoOrderApiBoundary.csproj" />
+  <Project Path="DemoOrderInputValidation/DemoOrderInputValidation.csproj" />
+</Solution>

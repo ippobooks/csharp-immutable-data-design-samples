@@ -60,7 +60,20 @@ public sealed record CreateOrderRequest(
 
     [Required]
     [MinLength(1, ErrorMessage = "至少需要一個訂單項目")]
-    IReadOnlyList<CreateOrderLineRequest> Lines);
+    IReadOnlyList<CreateOrderLineRequest> Lines) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(
+        ValidationContext validationContext)
+    {
+        // 集合必填與元素必填是兩件事，須另外拒絕 null 元素。
+        if (Lines?.Any(line => line is null) == true)
+        {
+            yield return new ValidationResult(
+                "訂單項目不能是 null",
+                [nameof(Lines)]);
+        }
+    }
+}
 
 public sealed record CreateOrderLineRequest(
     [Required]
@@ -88,11 +101,32 @@ public sealed record OrderLineResponse(
     decimal UnitPrice,
     decimal LineTotal);
 
-public sealed record OrderLine(
-    string ProductId,
-    string ProductName,
-    int Quantity,
-    decimal UnitPrice);
+public sealed record OrderLine
+{
+    public string ProductId { get; }
+    public string ProductName { get; }
+    public int Quantity { get; }
+    public decimal UnitPrice { get; }
+
+    public OrderLine(
+        string productId,
+        string productName,
+        int quantity,
+        decimal unitPrice)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(productName);
+        if (quantity <= 0)
+            throw new ArgumentOutOfRangeException(nameof(quantity));
+        if (unitPrice < 0)
+            throw new ArgumentOutOfRangeException(nameof(unitPrice));
+
+        ProductId = productId;
+        ProductName = productName;
+        Quantity = quantity;
+        UnitPrice = unitPrice;
+    }
+}
 
 public enum OrderStatus
 {
@@ -103,18 +137,56 @@ public enum OrderStatus
     Cancelled
 }
 
-public sealed record Order(
-    string Id,
-    string CustomerId,
-    OrderStatus Status,
-    ImmutableArray<OrderLine> Lines,
-    decimal Total,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? SubmittedAt = null,
-    DateTimeOffset? PaidAt = null,
-    DateTimeOffset? ShippedAt = null,
-    string? CancelReason = null)
+public sealed record Order
 {
+    public string Id { get; }
+    public string CustomerId { get; }
+    public OrderStatus Status { get; private init; }
+    public ImmutableArray<OrderLine> Lines { get; }
+    // 總額由已驗證的明細計算，不能由呼叫端另外指定。
+    public decimal Total => Lines.Sum(
+        line => line.Quantity * line.UnitPrice);
+    public DateTimeOffset CreatedAt { get; }
+    public DateTimeOffset? SubmittedAt { get; private init; }
+    public DateTimeOffset? PaidAt { get; private init; }
+    public DateTimeOffset? ShippedAt { get; private init; }
+    public string? CancelReason { get; private init; }
+
+    // Factory 使用這個入口；即使同組件內直接呼叫，也會執行驗證。
+    internal Order(
+        string id,
+        string customerId,
+        ImmutableArray<OrderLine> lines,
+        DateTimeOffset createdAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(customerId);
+        if (lines.IsDefaultOrEmpty)
+            throw new ArgumentException(
+                "至少需要一個訂單項目", nameof(lines));
+        if (lines.Any(line => line is null))
+            throw new ArgumentException(
+                "訂單項目不能是 null", nameof(lines));
+
+        Id = id;
+        CustomerId = customerId;
+        Status = OrderStatus.Draft;
+        Lines = lines;
+        CreatedAt = createdAt;
+    }
+
+    public Order Submit(DateTimeOffset now)
+    {
+        if (Status != OrderStatus.Draft)
+            throw new InvalidOperationException("只有草稿可以提交");
+
+        return this with
+        {
+            Status = OrderStatus.Submitted,
+            SubmittedAt = now
+        };
+    }
+
     public Order Pay(DateTimeOffset now)
     {
         if (Status != OrderStatus.Submitted)
@@ -129,6 +201,36 @@ public sealed record Order(
             PaidAt = now
         };
     }
+
+    public Order Ship(DateTimeOffset now)
+    {
+        if (Status != OrderStatus.Paid)
+            throw new InvalidOperationException(
+                "只有已付款的訂單可以出貨");
+
+        return this with
+        {
+            Status = OrderStatus.Shipped,
+            ShippedAt = now
+        };
+    }
+
+    public Order Cancel(string reason)
+    {
+        if (Status is not (
+            OrderStatus.Draft or
+            OrderStatus.Submitted or
+            OrderStatus.Paid))
+            throw new InvalidOperationException(
+                "只有草稿、已提交、或已付款的訂單可以取消");
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        return this with
+        {
+            Status = OrderStatus.Cancelled,
+            CancelReason = reason
+        };
+    }
 }
 
 public static class OrderFactory
@@ -139,20 +241,8 @@ public static class OrderFactory
         ImmutableArray<OrderLine> lines,
         DateTimeOffset now)
     {
-        if (lines.IsDefaultOrEmpty)
-        {
-            throw new ArgumentException(
-                "至少需要一個訂單項目",
-                nameof(lines));
-        }
-
-        return new Order(
-            id,
-            customerId,
-            OrderStatus.Draft,
-            lines,
-            lines.Sum(line => line.Quantity * line.UnitPrice),
-            now);
+        // 建構式集中驗證建立草稿時必須成立的規則。
+        return new Order(id, customerId, lines, now);
     }
 }
 
@@ -391,7 +481,10 @@ public sealed record ValidatedOrderInput
         if (lines is null || lines.Count == 0)
             errors.Add("至少需要一個訂單項目");
 
-        if (lines?.Any(line => line.Quantity <= 0) == true)
+        if (lines?.Any(line => line is null) == true)
+            errors.Add("訂單項目不能是 null");
+
+        if (lines?.Any(line => line is { Quantity: <= 0 }) == true)
             errors.Add("訂單數量必須大於零");
 
         if (errors.Count > 0)
