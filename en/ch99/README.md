@@ -2,19 +2,19 @@
 
 [繁體中文](../../zh-tw/ch99/README.md) | [English](../../en/ch99/README.md) | [日本語](../../ja/ch99/README.md)
 
-This guide connects Appendix A to its source code, refactoring notes, and benchmark reports. The full project lives in the public [text-to-braille repository][project]. This directory contains a reading guide, not a separate copy of the implementation.
+This guide collects links to the source code, refactoring notes, and benchmark reports for Appendix A. The full project is available in the public [text-to-braille repository][project]. This directory provides guidance on what to read; it does not maintain a separate copy of the code.
 
-You do not need to know Braille rules. The case study is about changing an existing system while keeping its editor, Undo/Redo behavior, saved documents, and performance usable.
+You do not need to know Braille rules to follow this case study. The focus is on gradually changing the data model in a system that already has user data, an editor, Undo/Redo support, and performance constraints.
 
-## What to take from the case study
+## Approaches you can apply in your own projects
 
-| Problem | Approach | Where it applies elsewhere |
+| Problem | Approach | Where it applies |
 | --- | --- | --- |
 | Lookup data is loaded once and queried repeatedly | Build with mutable collections, then create frozen indexes | Code tables, rates, and rule lookup |
 | The editor depends on existing mutable objects | Keep mutable models and route collection changes through explicit methods | Editing screens, trees, and document tools |
 | Construction is incremental and older workflows must keep working | Let a builder produce a new result or apply changes to an existing object | Gradual refactoring and coexistence of old and new workflows |
 | Copying or deserialization changes object references | Separate content equality from runtime identity used by the editor | Selection, positioning, and Undo/Redo |
-| Existing documents must remain readable and writable | Evolve the public API separately from the storage format | JSON, YAML, and import/export compatibility |
+| Existing documents must remain readable and writable | Handle compatibility for the public API and the storage format separately | JSON, YAML, and import/export compatibility |
 
 <a id="reading-order"></a>
 
@@ -25,32 +25,32 @@ You do not need to know Braille rules. The case study is about changing an exist
 3. [Builder refactoring walkthrough][builder-story]: compare producing a new result with updating an existing object.
 4. [Performance regression analysis][regression]: see why a clearer design can still run more slowly.
 5. [Refactoring plan][plan] and [full development notes][live-docs]: follow individual steps when you need more detail.
-6. [Overall A/B report][overall-report] and [lookup-stage A/B report][lookup-report]: distinguish cumulative results from changes measured in one stage.
+6. [Overall A/B report][overall-report] and [lookup-stage A/B report][lookup-report]: separate the cumulative improvements across the full refactoring effort from the results of a single stage.
 
-Most source comments, development notes, and benchmark reports are in Chinese. The three README files provide the same reading route and a summary of the decisions; the original materials remain in their original language. Chinese benchmark text is conversion input, not documentation to translate.
+Source comments, full refactoring notes, and benchmark reports are primarily in Chinese. The Chinese, English, and Japanese README files provide the same reading order and summarize the same key points; the source materials remain in their original language. Chinese text in the tests is input data used to verify conversion behavior and should not be changed when translating the guide.
 
 <a id="source-code"></a>
 
-## Source code entry points
+## Suggested source files to read
 
 | File | What to look for |
 | --- | --- |
 | [XmlBrailleTable.cs][xml-table] | XML loading, index construction, and lookup |
-| [BrailleWordBuilder.cs][word-builder] | The different roles of `Build()`, `ToBrailleWord()`, and `ApplyTo(...)` |
+| [BrailleWordBuilder.cs][word-builder] | What `Build()`, `ToBrailleWord()`, and `ApplyTo(...)` each do |
 | [BrailleLine.cs][line-model] and [BrailleWord.cs][word-model] | Mutable models, read-only views, mutation methods, and runtime identity |
 | [BrailleWordBuilderTest.cs][builder-test] | Checks for builder and result behavior |
 | [YamlSerializationTests.cs][yaml-test] | Tests for YAML read/write compatibility |
 | [BrailleConversionBenchmarks.cs][benchmark-code] and [TestData][test-data] | Measured operations and input data |
 
-The builder and some result interfaces are internal types. The appendix snippets explain code inside the project; they are not APIs you can call by pasting them into a separate application. `Build()` creates a new result. `ApplyTo(...)` mutates the existing object passed to it.
+The builder and some interfaces used to represent results are internal types. The snippets in the appendix explain the project's internal workflow and cannot be copied directly into a separate application for use there. `Build()` creates a new result, whereas `ApplyTo(...)` modifies the existing object passed to it. These are distinct operations.
 
 <a id="run"></a>
 
 ## Run the tests and benchmarks
 
-Install Git and the .NET 10 SDK, with access to the required NuGet packages. The commands use the actual paths in the public repository and run the core library tests without launching the desktop editor.
+Install Git and the .NET 10 SDK, and make sure you can restore the required NuGet packages. The commands below download the public repository, then specify the project paths relative to its root directory. The tests and benchmarks cover only the core library; they do not launch the desktop editor.
 
-Links and checkout are pinned to [reference snapshot][snapshot] `c513c9f1fc8badb1bb843490fee60e57844e4e44`. This keeps the guide stable as the branch changes. The snapshot is a reference for this guide, not the candidate version in the historical reports below.
+The source code and report links in this guide, along with the `git checkout` command below, all use the same [reference version][snapshot]: `c513c9f1fc8badb1bb843490fee60e57844e4e44`. This keeps subsequent branch changes from affecting the guide. This version is provided for readers to explore; it is not the version used as the refactoring candidate in the historical benchmark reports below.
 
 ```sh
 git clone --branch immutable-design https://github.com/braillekit/text-to-braille.git
@@ -62,7 +62,7 @@ dotnet test src/EasyBrailleEditApp/BrailleToolkit.Tests/BrailleToolkit.Tests.csp
 dotnet run --project src/EasyBrailleEditApp/BrailleToolkit.Benchmarks/BrailleToolkit.Benchmarks.csproj -c Release -- --filter "*BrailleConversionBenchmarks*"
 ```
 
-BenchmarkDotNet takes time to run. Results depend on hardware, OS, SDK, and the execution environment. These commands measure the reference snapshot only; they do not automatically run a before-and-after comparison.
+BenchmarkDotNet takes time to run. Results depend on hardware, OS, SDK, and the execution environment. These commands measure only this reference version; they do not automatically run a before-and-after comparison.
 
 <a id="benchmarks"></a>
 
@@ -73,7 +73,7 @@ BenchmarkDotNet takes time to run. Results depend on hardware, OS, SDK, and the 
 | [Cumulative refactoring results][overall-report] | `ba9bc71d6b33b00dbe04de957c5acc2dc07e576d` | `279355533346a66352230062c89e30a5637cacf1` |
 | [Lookup and index refactoring][lookup-report] | `dcf71ef2d0aba531b6d724628234bec7d08168e1` | `8251b2df5bc25d0b4bb67826e3745cbc64f59b2a` |
 
-To reproduce a historical comparison, follow the report: use separate worktrees, identical input data, and the same benchmark harness. The cumulative comparison starts before the benchmark project existed. Its report explains how the harness and test data were added without changing the original production code. Comparing an arbitrary older version with the current branch is a different experiment.
+To reproduce the comparisons in the reports, follow their instructions to set up two separate worktrees and use the same input data and benchmark code. The baseline for the cumulative comparison predates the benchmark project. The report explains how to add only the benchmark code and test data, leaving the original application code unchanged. Do not compare the current branch directly with an arbitrary older version, as the comparison conditions may differ from those in the report.
 
 The results combine lookup, builder, and data-flow changes. They do not show that records, structs, or immutable designs are inherently faster.
 
